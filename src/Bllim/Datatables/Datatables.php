@@ -30,6 +30,7 @@ class Datatables
 
     public $columns = array();
     public $last_columns = array();
+    public $fqColumnNameMap = array(); // a map from e.g. "id" => "log.id"
 
     protected $count_all = 0;
     protected $display_all = 0;
@@ -237,6 +238,7 @@ class Datatables
     {
         $extra_columns_indexes = array();
         $last_columns = array();
+        $mapped = array();
         $count = 0;
 
         foreach ($this->extra_columns as $key => $value) {
@@ -259,10 +261,25 @@ class Datatables
             // previous regex #^(\S*?)\s+as\s+(\S*?)$# prevented subqueries and functions from being detected as alias
             preg_match('#\s+as\s+(\S*?)$#si',$this->columns[$i],$matches);
             $last_columns[$count] = empty($matches) ? $this->columns[$i] : $matches[1];
+            if(!empty($matches))
+            {
+                // aliased, so we can use this match as the json column name
+                $mapped[$matches[1]] = $matches[1];
+            }
+            else // look for the column name (as it would be returned in sql/json; no table aliasing)
+            {
+                preg_match('#([^\s\.]*?)\s*$#si',$this->columns[$i],$other_matches);
+                if(!empty($other_matches))
+                {
+                    $mapped[$other_matches[1]] = $last_columns[$count];
+                }
+            }
+
             $count++;
         }
 
         $this->last_columns = $last_columns;
+        $this->fqColumnNameMap = $mapped;
     }
 
     /**
@@ -344,8 +361,6 @@ class Datatables
      */
     protected function ordering()
     {
-
-
         if(!is_null(Input::get('iSortCol_0')))
         {
             $columns = $this->clean_columns( $this->last_columns );
@@ -354,8 +369,20 @@ class Datatables
             {
                 if ( Input::get('bSortable_'.intval(Input::get('iSortCol_'.$i))) == "true" )
                 {
-                    if(isset($columns[intval(Input::get('iSortCol_'.$i))]))
-                        $this->query->orderBy($columns[intval(Input::get('iSortCol_'.$i))],Input::get('sSortDir_'.$i));
+                    if($this->mDataSupport)
+                    {
+                        // lookup the column names by client indexes
+                        $prop = Input::get('mDataProp_'.intval(Input::get('iSortCol_'.$i)));
+                        if(isset($prop) && isset($this->fqColumnNameMap[$prop]))
+                        {
+                            $this->query->orderBy($this->fqColumnNameMap[$prop], Input::get('sSortDir_'.$i));
+                        }
+                    }
+                    else
+                    {
+                        if(isset($columns[intval(Input::get('iSortCol_'.$i))]))
+                            $this->query->orderBy($columns[intval(Input::get('iSortCol_'.$i))],Input::get('sSortDir_'.$i));
+                    }
                 }
             }
 
@@ -393,28 +420,36 @@ class Datatables
             $copy_this = $this;
             $copy_this->columns = $columns;
 
-            for ($i=0,$c=count($copy_this->columns);$i<$c;$i++)
-            {
-                if(in_array($this->getColumnName($copy_this->columns[$i]), $this->excess_columns))
-                {
-                    unset($copy_this->columns[$i]);
-                }
-            }
-
-            $copy_this->columns = array_values($copy_this->columns);
-
             $this->query->where(function($query) use ($copy_this) {
 
                 $db_prefix = $copy_this->database_prefix();
 
-
-
                 for ($i=0,$c=count($copy_this->columns);$i<$c;$i++)
                 {
-                    if (Input::get('bSearchable_'.$i) == "true")
+                    $column = null;
+                    if ($this->mDataSupport)
+                    {
+                        // lookup the client column name to determine if searchable or blacklisted
+                        $key = array_search($copy_this->columns[$i], $this->fqColumnNameMap);
+                        if(isset($key))
+                        {
+                            $column = $copy_this->columns[$i];
+                            for($j=0;$j<intval(Input::get('iColumns'));$j++)
+                            {
+                                if(Input::get('mDataProp_'.$j) == $key
+                                    && Input::get('bSearchable_'.$j) === "false")
+                                {
+                                    $column = null; // don't allow searching on "blacklisted" columns, otherwise allow searching across everything
+                                }
+                            }
+                        }
+                    }
+                    else if (Input::get('bSearchable_'.$i) !== "false")
                     {
                         $column = $copy_this->columns[$i];
-
+                    }
+                    if(isset($column))
+                    {
                         if (stripos($column, ' AS ') !== false){
                             $column = substr($column, stripos($column, ' AS ')+4);
                         }
@@ -502,7 +537,7 @@ class Datatables
      * @return null
      */
      protected function count($count  = 'count_all')
-     {   
+     {
 
 		//Get columns to temp var.
         if($this->query_type == 'eloquent') {
@@ -517,7 +552,7 @@ class Datatables
         // if its a normal query ( no union ) replace the slect with static text to improve performance
         $myQuery = clone $query;
         if( !preg_match( '/UNION/i', $myQuery->toSql() ) ){
-        	$myQuery->select( DB::Raw("'1' as row") );	        	
+        	$myQuery->select( DB::Raw("'1' as row") );
         }
 
 

@@ -41,7 +41,7 @@ class Datatables
 
     protected $mDataSupport;
 
-	protected $index_column;
+    protected $index_column;
 
 
     /**
@@ -145,16 +145,16 @@ class Datatables
         return $this;
     }
 
-	/**
-	 * Sets the DataTables index column (as used to set, e.g., id of the <tr> tags) to the named column
-	 *
-	 * @param $name
-	 * @return $this
-	 */
-	public function set_index_column($name) {
-		$this->index_column = $name;
-		return $this;
-	}
+    /**
+     * Sets the DataTables index column (as used to set, e.g., id of the <tr> tags) to the named column
+     *
+     * @param $name
+     * @return $this
+     */
+    public function set_index_column($name) {
+        $this->index_column = $name;
+        return $this;
+    }
 
     /**
      * Saves given query and determines its type
@@ -180,9 +180,9 @@ class Datatables
             foreach ($this->extra_columns as $key => $value) {
 
                 if (is_string($value['content'])):
-                $value['content'] = $this->blader($value['content'], $rvalue);
+                    $value['content'] = $this->blader($value['content'], $rvalue);
                 elseif (is_callable($value['content'])):
-                $value['content'] = $value['content']($this->result_object[$rkey]);
+                    $value['content'] = $value['content']($this->result_object[$rkey]);
                 endif;
 
                 $rvalue = $this->include_in_array($value,$rvalue);
@@ -191,9 +191,9 @@ class Datatables
             foreach ($this->edit_columns as $key => $value) {
 
                 if (is_string($value['content'])):
-                $value['content'] = $this->blader($value['content'], $rvalue);
+                    $value['content'] = $this->blader($value['content'], $rvalue);
                 elseif (is_callable($value['content'])):
-                $value['content'] = $value['content']($this->result_object[$rkey]);
+                    $value['content'] = $value['content']($this->result_object[$rkey]);
                 endif;
 
                 $rvalue[$value['name']] = $value['content'];
@@ -217,13 +217,13 @@ class Datatables
                     unset($value[$evalue]);
                 }
 
-	            $row = array_values($value);
-	            if ($this->index_column) {
-		            if (!array_key_exists($this->index_column, $value)) {
-			            throw new \Exception('Index column set to non-existent column "' . $this->index_column . '"');
-		            }
-		            $row['DT_RowId'] = $value[$this->index_column];
-	            }
+                $row = array_values($value);
+                if ($this->index_column) {
+                    if (!array_key_exists($this->index_column, $value)) {
+                        throw new \Exception('Index column set to non-existent column "' . $this->index_column . '"');
+                    }
+                    $row['DT_RowId'] = $value[$this->index_column];
+                }
                 $this->result_array_r[] = $row;
             }
         }
@@ -259,12 +259,12 @@ class Datatables
             }
 
             // previous regex #^(\S*?)\s+as\s+(\S*?)$# prevented subqueries and functions from being detected as alias
-            preg_match('#\s+as\s+(\S*?)$#si',$this->columns[$i],$matches);
-            $last_columns[$count] = empty($matches) ? $this->columns[$i] : $matches[1];
+            preg_match('#(\S*?)\s+as\s+(\S*?)$#si',$this->columns[$i],$matches);
+            $last_columns[$count] = empty($matches) ? $this->columns[$i] : $matches[2];
             if(!empty($matches))
             {
                 // aliased, so we can use this match as the json column name
-                $mapped[$matches[1]] = $matches[1];
+                $mapped[$matches[2]] = $matches[1];
             }
             else // look for the column name (as it would be returned in sql/json; no table aliasing)
             {
@@ -431,15 +431,15 @@ class Datatables
                     {
                         // lookup the client column name to determine if searchable or blacklisted
                         $key = array_search($copy_this->columns[$i], $this->fqColumnNameMap);
-                        if(isset($key))
+                        if($key)
                         {
-                            $column = $copy_this->columns[$i];
                             for($j=0;$j<intval(Input::get('iColumns'));$j++)
                             {
                                 if(Input::get('mDataProp_'.$j) == $key
-                                    && Input::get('bSearchable_'.$j) === "false")
+                                    && Input::get('bSearchable_'.$j) === "true")
                                 {
-                                    $column = null; // don't allow searching on "blacklisted" columns, otherwise allow searching across everything
+                                    $column = $copy_this->columns[$i];
+                                    break;
                                 }
                             }
                         }
@@ -536,10 +536,10 @@ class Datatables
      * @param string $count variable to store to 'count_all' for iTotalRecords, 'display_all' for iTotalDisplayRecords
      * @return null
      */
-     protected function count($count  = 'count_all')
-     {
+    protected function count($count  = 'count_all')
+    {
 
-		//Get columns to temp var.
+        //Get columns to temp var.
         if($this->query_type == 'eloquent') {
             $query = $this->query->getQuery();
             $connection = $this->query->getModel()->getConnection()->getName();
@@ -552,15 +552,15 @@ class Datatables
         // if its a normal query ( no union ) replace the slect with static text to improve performance
         $myQuery = clone $query;
         if( !preg_match( '/UNION/i', $myQuery->toSql() ) ){
-        	$myQuery->select( DB::Raw("'1' as row") );
+            $myQuery->select( DB::Raw("'1' as row") );
         }
 
 
         $this->$count = DB::connection($connection)
-        ->table(DB::raw('('.$myQuery->toSql().') AS count_row_table'))
-        ->setBindings($myQuery->getBindings())->remember(1)->count();
+            ->table(DB::raw('('.$myQuery->toSql().') AS count_row_table'))
+            ->setBindings($myQuery->getBindings())->remember(1)->count();
 
-     }
+    }
 
     /**
      * Returns column name from <table>.<column>
@@ -595,11 +595,11 @@ class Datatables
         $sColumns = array_merge_recursive($this->columns,$this->sColumns);
 
         $output = array(
-                "sEcho" => intval(Input::get('sEcho')),
-                "iTotalRecords" => $this->count_all,
-                "iTotalDisplayRecords" => $this->display_all,
-                "aaData" => $this->result_array_r,
-                "sColumns" => $sColumns
+            "sEcho" => intval(Input::get('sEcho')),
+            "iTotalRecords" => $this->count_all,
+            "iTotalDisplayRecords" => $this->display_all,
+            "aaData" => $this->result_array_r,
+            "sColumns" => $sColumns
         );
 
         if(Config::get('app.debug', false)) {
